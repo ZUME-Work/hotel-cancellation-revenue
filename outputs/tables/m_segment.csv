@@ -1,0 +1,8 @@
+market_segment,rooms,blocks,avg_adr,cancel_pct_room,cancel_pct_block,booked_rev_per_room,realized_rev_per_room,share_of_realized_rev_pct,share_of_lost_rev_pct
+Online TA,56128,51284,117.9,36.9,35.5,426.4,244.2,52.7,61.2
+Offline TA/TO,24048,13748,87.7,34.5,14.9,338.7,235.3,21.8,14.9
+Groups,19758,4891,79.7,61.2,27.2,236.3,94.6,7.2,16.7
+Direct,12447,11650,116.9,15.5,14.9,409.0,329.2,15.8,5.9
+Corporate,5231,4155,70.2,18.9,12.2,148.0,110.5,2.2,1.2
+Complementary,715,682,3.0,12.2,12.2,7.1,6.7,0.0,0.0
+Aviation,231,222,102.7,22.1,19.8,378.6,306.8,0.3,0.1

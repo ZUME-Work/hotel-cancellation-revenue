@@ -1,0 +1,16 @@
+check_name,n_rows
+total_rows,119390
+exact_duplicate_rows,31994
+zero_guests (adults+children+babies=0),180
+zero_nights,715
+adr_negative,1
+adr_zero,1959
+adr_gt_1000,1
+children_null,4
+country_null,488
+agent_null,16340
+company_null,112593
+market_segment_undefined,2
+distribution_channel_undefined,5
+canceled,44224
+leak_status_mismatch_target,0

@@ -1,0 +1,19 @@
+deposit_type,market_segment,n_rows,pct_rows_in_duplicate_groups,cancel_pct_row_level,cancel_pct_unique_rows_only
+No Deposit,Online TA,56403,14.6,36.6,34.5
+No Deposit,Offline TA/TO,19209,37.8,17.2,12.0
+No Deposit,Direct,12581,11.1,15.2,14.2
+No Deposit,Groups,10509,72.5,28.3,12.0
+Non Refund,Groups,9172,98.4,99.3,84.8
+Non Refund,Offline TA/TO,5006,98.8,99.9,94.8
+No Deposit,Corporate,4957,24.0,13.7,10.6
+No Deposit,Complementary,743,10.1,13.1,12.3
+Non Refund,Corporate,334,85.0,93.4,64.0
+No Deposit,Aviation,237,8.0,21.9,17.9
+Refundable,Groups,130,51.5,10.0,9.5
+Non Refund,Online TA,56,82.1,94.6,70.0
+Non Refund,Direct,19,57.9,84.2,62.5
+Refundable,Online TA,18,38.9,100.0,100.0
+Refundable,Direct,6,0.0,33.3,33.3
+Refundable,Offline TA/TO,4,0.0,50.0,50.0
+Refundable,Corporate,4,50.0,25.0,50.0
+No Deposit,Undefined,2,0.0,100.0,100.0
