@@ -1,0 +1,3 @@
+model,test_auc,test_brier,mean_predicted_pct,actual_cancel_pct,top10pct_actual_cancel_pct
+Logistic regression,0.754,0.178,28.7,32.0,73.7
+Gradient boosting,0.77,0.178,28.8,32.0,70.7

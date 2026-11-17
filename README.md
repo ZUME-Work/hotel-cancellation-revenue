@@ -1,11 +1,9 @@
 # Hotel Bookings: Which Bookings Actually Make Money After Cancellations?
 
-> **Status:** work in progress. Data quality, two-level grain and descriptive findings are done; the cancellation model, policy simulation and A/B test design are next.
-
 ## TL;DR
 - **Question:** After cancellations are taken into account, which booking segments bring in the most realized revenue, and what policy should apply to high-risk bookings?
-- **Answer (so far):** The City Hotel keeps only 57% of the revenue it books. Bookings made more than 180 days ahead realize the least per room (€77–126 vs ~€200), because 63–71% of those rooms are cancelled.
-- **Recommendation:** _pending the cancellation model and policy simulation._
+- **Answer:** The City Hotel keeps only 57% of the revenue it books. A cancellation model trained on 2015–2016 picks out bookings on unseen 2017 data where 71% go on to cancel (vs 32% overall).
+- **Recommendation:** Test a first-night deposit on the 10% riskiest no-deposit bookings. In simulation it adds about €390k (+3.9% realized revenue, Jan–Aug 2017) if nobody walks away, and stays positive unless more than **38%** of those guests abandon the booking. That walk-away rate is the unknown an A/B test must measure.
 
 ## Business context
 Long-lead bookings often pay a higher ADR, but they also cancel more often. Judging a channel or lead-time bucket on ADR or conversion alone can overstate its value. This project measures **realized revenue per booking** (ADR × nights × probability of not cancelling) and tests whether a targeted deposit or overbooking policy would pay off.
@@ -61,7 +59,28 @@ Both cancel rates are reported side by side. Where they diverge, the gap is the 
 
 Lead-time buckets: 0–7, 8–30, 31–90, 91–180, 181–365, 365+ days. All metrics come from `sql/05_metrics.sql`; result tables are in `outputs/tables/`.
 
-_Next: cancellation model on the block table with a time-based split (train 2015–2016, test 2017), using only fields known at booking time._
+### Cancellation model
+- **Grain:** block table (86,632 booking records), so a 40-room block counts once.
+- **Split by time, not at random:** train on arrivals up to 2016 (55,103 records, 25.2% cancelled), test on Jan–Aug 2017 (31,529 records, 32.0% cancelled). A model is only useful if it predicts bookings it has not seen yet.
+- **Models:** logistic regression (interpretable baseline) and gradient boosting (`scripts/06_cancellation_model.py`).
+- **Leakage: fields excluded on purpose**
+
+| Field | Why it is excluded |
+|---|---|
+| `reservation_status` | It *is* the outcome (100% agreement with `is_canceled`) |
+| `required_car_parking_spaces` | 7,289 records with a parking space have **0.00%** cancellation, so the field is only filled once the guest arrives |
+| `country` | May be confirmed at check-in in the hotel's system, so it is not reliably known at booking time |
+| `assigned_room_type`, `booking_changes` | Happen after the booking is made |
+
+### Deposit policy simulation (2017 test set)
+Policy: charge one night's ADR as a non-refundable deposit to the top *k*% riskiest **No Deposit** bookings; the hotel keeps it if the guest cancels. Two behaviours are unknown, so they are varied rather than assumed:
+- **walk-away rate:** share of targeted guests who no longer book because of the deposit (0–60%)
+- **cancel reduction:** relative drop in cancellation among those who still book (0% or 25%)
+
+The comparison is against targeting the same number of bookings **at random**, to show what the model adds.
+
+### A/B test sizing
+Two-sided α = 0.05, power = 0.80, metric = realized revenue per booking in the top risk decile (mean €182, SD €323).
 
 ## Findings
 ![Booked vs realized revenue per room by lead time](outputs/charts/lead_time_revenue.png)
@@ -76,28 +95,70 @@ _Next: cancellation model on the block table with a time-based split (train 2015
 
 **5. The "Groups cancel 61% of the time" headline is a block effect.** Counted by room, Groups cancel 61.2%; counted by booking record, 27.2%. A handful of large cancelled blocks drive the room-level number, so a policy aimed at "group guests" in general would hit the wrong customers.
 
-_Interpretation caution: these are associations. Lead time, season and segment move together, so finding 2 is not proof that long lead time causes cancellation. The model step controls for these jointly._
+_Interpretation caution: findings 1–5 are associations. Lead time, season and segment move together, so finding 2 is not proof that long lead time causes cancellation._
+
+**6. The model ranks risk well enough to act on, but it under-predicts 2017.** Gradient boosting reaches AUC 0.770 on unseen 2017 bookings (logistic regression 0.754). In the top risk decile, 70.7% actually cancelled. The cancel rate drifted up from 25.2% in training to 32.0% in 2017, so the middle deciles are under-predicted by 5–8 points: the model needs regular retraining, and its scores should be used for **ranking**, not as exact probabilities.
+
+![Calibration on 2017 test set](outputs/charts/model_calibration.png)
+
+| Model | Test AUC | Brier | Predicted cancel % | Actual cancel % | Actual cancel % in top 10% |
+|---|---:|---:|---:|---:|---:|
+| Logistic regression | 0.754 | 0.178 | 28.7 | 32.0 | 73.7 |
+| Gradient boosting | 0.770 | 0.178 | 28.8 | 32.0 | 70.7 |
+
+Strongest signals in the logistic model: previous cancellations by the same guest (+), Online TA segment (+), lead time (+), number of special requests (−), previous completed stays (−).
+
+**7. Targeting is what makes a deposit policy pay.** Deposit on the top 10% riskiest bookings:
+
+| Walk-away rate | Model-targeted (EUR) | Random 10% (EUR) |
+|---:|---:|---:|
+| 0% | +386,781 | +146,904 |
+| 10% | +283,733 | +32,650 |
+| 20% | +180,684 | −81,603 |
+| 30% | +77,636 | −195,857 |
+
+Applied at random, the same deposit loses money once 20% of guests walk away. Targeted by the model, it breaks even only at a **38%** walk-away rate. If the deposit also makes stayers 25% less likely to cancel, the gain at 0% walk-away rises to +€713k (+7.3%). Full grid: `outputs/tables/policy_simulation.csv`.
+
+![Break-even of the deposit policy](outputs/charts/policy_breakeven.png)
 
 ## Recommendation and how to test it
-_TODO: policy, A/B test design, primary metric (realized revenue per booking), guardrails (conversion, cancellation)._
+**Recommendation:** pilot a first-night deposit for No Deposit bookings in the top 10% of model risk, starting with Online TA and long-lead City Hotel bookings, where most revenue is lost.
+
+**A/B test design**
+- **Unit:** booking attempt that scores in the top risk decile at checkout. Randomize 50/50: control = current terms, treatment = first-night deposit.
+- **Primary metric:** realized revenue per booking attempt, counting walk-aways as €0. This one number captures both effects: deposits kept on cancellation and guests lost at checkout.
+- **Guardrails:** checkout conversion (directly measures walk-away against the 38% break-even), cancellation rate, customer complaints and review scores.
+- **Decision rule:** roll out if realized revenue per attempt rises significantly and conversion falls by less than the break-even.
+- **Sample size:**
+
+| Minimum detectable lift | Bookings per arm | Weeks at these two hotels' volume |
+|---:|---:|---:|
+| 5% | 19,696 | 438 |
+| 10% | 4,924 | 110 |
+| 15% | 2,189 | 49 |
+
+Revenue per booking is very noisy (SD €323 on a €182 mean), so **two hotels alone cannot run this test in reasonable time.** It needs to run across many properties at once (where an OTA has a structural advantage), or use checkout conversion as an earlier read-out, since conversion is a binary metric that needs far fewer bookings.
 
 ## Limitations
 - No booking ID, so duplicate rows cannot be told apart from separate rooms with certainty.
 - Two hotels in one country; results may not generalize.
-- The data only contains bookings that were made, not searches or abandoned bookings, so it says nothing about conversion.
+- The data only contains bookings that were made, not searches or abandoned bookings, so it says nothing about conversion. That is why the walk-away rate is an assumption varied in the simulation and must be measured in the A/B test.
+- The simulation assumes guests who walk away are average for the targeted group, and that a cancelling guest who paid a deposit forfeits it in full.
+- No-shows are counted as €0 revenue; in reality some may be charged, so realized revenue is slightly understated.
+- The 2017 test set covers January to August only, so it under-represents autumn and winter.
 
 ## How to run
 ```bash
 pip install -r requirements.txt
 python scripts/download_data.py   # only if data/raw/hotels.csv is missing
 python scripts/build_db.py        # rebuilds hotel.duckdb from sql/*.sql
+python scripts/06_cancellation_model.py   # model, policy simulation, A/B sizing -> outputs/
 ```
 
 ## Repo structure
 ```
 data/raw/            raw CSV (committed, ~17 MB)
 sql/                 numbered SQL steps, run in order by build_db.py
-scripts/             download + build scripts
-notebooks/           analysis notebooks
+scripts/             download, build, and model / simulation scripts
 outputs/tables|charts  small result files shown in this README
 ```
